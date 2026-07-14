@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "全局自定义动态背景",
+  "plugin_id": "global-video-bg-plugin",
+  "version": "1.0.1",
+  "minversion": null,
+  "moekoe": true,
+  "author": {
+    "name": "篍约",
+    "url": "https://github.com/qiuyue123-star/MoeKoeMusic-chajian/tree/main"
+  },
+  "description": "独立全局自定义动态背景，无需其他背景插件打底，永久保存视频，支持透明度调节，与其他背景插件互斥除自定义背景以外，需配合自定义背景插件使用。",
+  "permissions": [
+    "storage"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
