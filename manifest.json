@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "全局自定义动态背景",
   "plugin_id": "global-video-bg-plugin",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minversion": null,
   "moekoe": true,
   "author": {
