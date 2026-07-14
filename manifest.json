@@ -9,7 +9,7 @@
     "name": "篍约",
     "url": "https://github.com/qiuyue123-star/MoeKoeMusic-chajian/tree/main"
   },
-  "description": "独立全局自定义动态背景，无需其他背景插件打底，永久保存视频，支持透明度调节，与其他背景插件互斥除自定义背景以外，需配合自定义背景插件使用。",
+  "description": "为MoeKoe Music提供独立全局自定义动态背景，无需其他背景插件打底，永久保存视频，支持透明度调节，与其他背景插件互斥除自定义背景以外，需配合自定义背景插件使用。",
   "permissions": [
     "storage"
   ],
