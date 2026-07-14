@@ -1,0 +1,88 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+body {
+  width: 360px;
+  padding: 16px;
+  background: #1a1a2e;
+  color: #fff;
+}
+.container h2 {
+  text-align: center;
+  margin-bottom: 18px;
+  font-size: 18px;
+  color: #e0e0ff;
+}
+.upload-box {
+  margin-bottom: 16px;
+}
+.upload-btn {
+  width: 100%;
+  padding: 10px;
+  background: #4060ff;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+  transition: 0.2s;
+}
+.upload-btn:hover {
+  background: #2848dd;
+}
+.tip {
+  font-size: 12px;
+  color: #aaa;
+  margin-top: 6px;
+}
+.file-name {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #8cf;
+  word-break: break-all;
+}
+.opacity-box {
+  margin: 18px 0;
+}
+#opacity-slider {
+  width: 100%;
+  margin-top: 8px;
+}
+.btn-group {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+.save-btn {
+  flex: 1;
+  padding: 9px;
+  background: #2cb963;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+}
+.clear-btn {
+  flex: 1;
+  padding: 9px;
+  background: #e04444;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+}
+.msg {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 13px;
+  min-height: 18px;
+}
+.success {
+  color: #6cf296;
+}
+.error {
+  color: #ff8888;
+}
