@@ -8,11 +8,11 @@
 </head>
 <body>
   <div class="container">
-    <h2>自定义动态背景设置</h2>
+    <h2>全局自定义动态背景设置</h2>
 
     <!-- 视频上传区域 -->
     <div class="upload-box">
-      <label for="video-input">上传动态背景</label>
+      <label for="video-input">上传背景视频</label>
       <input type="file" id="video-input" accept=".mp4,.webm,.mov,.avi,.mkv" hidden>
       <button class="upload-btn" id="select-btn">选择视频文件</button>
       <p class="tip">支持 mp4/webm/mov/avi/mkv，最大300MB</p>
@@ -33,6 +33,16 @@
 
     <!-- 提示文字 -->
     <p class="msg" id="msg"></p>
+
+    <!-- 新增：关于插件板块 -->
+    <div class="about-box">
+      <hr>
+      <h3>关于本插件</h3>
+      <p>作者：篍约</p>
+      <p>插件版本：v1.0.2</p>
+      <p>创作日期：2026-07-14</p>
+      <p class="about-desc">功能：为MoeKoeMusic提供独立全局视频动态背景，无需其他背景插件即可单独生效，永久保存视频配置，自带插件互斥防多层叠加。</p>
+    </div>
   </div>
   <script src="popup.js"></script>
 </body>
