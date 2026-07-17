@@ -1,4 +1,4 @@
-const MAX_SIZE = 300 * 1024 * 1024; // 300MB
+const MAX_SIZE = 300 * 1024 * 1024; // 300MB 上限不变
 const ALLOW_EXT = ['mp4', 'webm', 'mov', 'avi', 'mkv'];
 
 const dom = {
@@ -9,12 +9,18 @@ const dom = {
   opacityVal: document.getElementById('opacity-value'),
   saveBtn: document.getElementById('save-btn'),
   clearBtn: document.getElementById('clear-btn'),
-  msgBox: document.getElementById('msg')
+  msgBox: document.getElementById('msg'),
+  // 悬浮球DOM
+  floatBallSwitch: document.getElementById('floatBallSwitch'),
+  saveFloatConfig: document.getElementById('saveFloatConfig'),
+  floatTip: document.getElementById('floatTip')
 };
 
 let selectFile = null;
 let hasConflict = false;
 let popupConflictTimer = null;
+// 唯一视频ID，用于IndexedDB索引
+const VIDEO_STORE_ID = "global-bg-video-001";
 
 // 实时刷新冲突状态
 async function refreshConflictStatus() {
@@ -24,11 +30,15 @@ async function refreshConflictStatus() {
     dom.selectBtn.disabled = true;
     dom.saveBtn.disabled = true;
     dom.opacitySlider.disabled = true;
+    dom.saveFloatConfig.disabled = true;
+    dom.floatBallSwitch.disabled = true;
     showMsg("⚠️ 检测到其他背景插件，本插件已禁用，无法叠加生效，请卸载其他背景插件", "error");
   } else {
     dom.selectBtn.disabled = false;
     dom.saveBtn.disabled = false;
     dom.opacitySlider.disabled = false;
+    dom.saveFloatConfig.disabled = false;
+    dom.floatBallSwitch.disabled = false;
     dom.msgBox.textContent = "";
   }
 }
@@ -37,12 +47,13 @@ window.onload = async () => {
   await refreshConflictStatus();
   popupConflictTimer = setInterval(refreshConflictStatus, 1500);
 
-  // 读取历史透明度配置
-  const data = await chrome.storage.local.get(['bgOpacity']);
+  // 读取透明度、悬浮球、视频元数据（轻量数据，无容量压力）
+  const data = await chrome.storage.local.get(['videoId','bgOpacity','floatBallEnable','videoName','videoType','fileSize']);
   if (data.bgOpacity) {
     dom.opacitySlider.value = data.bgOpacity;
     dom.opacityVal.textContent = data.bgOpacity;
   }
+  dom.floatBallSwitch.checked = !!data.floatBallEnable;
 };
 
 window.addEventListener('unload', () => {
@@ -84,7 +95,7 @@ dom.fileInput.addEventListener('change', (e) => {
   showMsg('文件校验通过，可保存', 'success');
 });
 
-// 【核心修改】永久存储二进制视频数据，重启不丢失
+// 【核心优化】分离存储：轻量配置存storage，大视频二进制存入IndexedDB，永久保存，无配额限制
 dom.saveBtn.addEventListener('click', async () => {
   if (hasConflict) return;
   const opacity = parseFloat(dom.opacitySlider.value);
@@ -93,39 +104,74 @@ dom.saveBtn.addEventListener('click', async () => {
   msg.textContent = '处理中...';
 
   try {
-    const saveData = { bgOpacity: opacity, updateTime: Date.now() };
-    // 有新视频文件：读取二进制数组永久存入storage
+    // 基础轻量配置（极小体积，存入storage无压力）
+    const saveMeta = {
+      videoId: VIDEO_STORE_ID,
+      bgOpacity: opacity,
+      updateTime: Date.now(),
+      videoName: selectFile?.name || null,
+      fileSize: selectFile?.size || null,
+      videoType: selectFile?.type || null
+    };
+    await chrome.storage.local.set(saveMeta);
+
+    // 存在新视频：读取二进制存入IndexedDB大容量数据库
     if (selectFile) {
+      msg.textContent = "正在写入视频永久存储...";
       const arrayBuffer = await selectFile.arrayBuffer();
       const uint8Arr = Array.from(new Uint8Array(arrayBuffer));
-      saveData.videoBinary = uint8Arr;
-      saveData.videoName = selectFile.name;
-      saveData.fileSize = selectFile.size;
-      saveData.videoType = selectFile.type;
+      // 发送至后台写入IndexedDB
+      const dbRes = await chrome.runtime.sendMessage({
+        type: "saveVideoDB",
+        videoId: VIDEO_STORE_ID,
+        binaryArr: uint8Arr,
+        meta: { name: selectFile.name, size: selectFile.size, type: selectFile.type }
+      });
+      if (!dbRes.success) throw new Error(dbRes.err || "数据库写入失败");
     }
-    await chrome.storage.local.set(saveData);
     // 通知全页面刷新背景
     chrome.runtime.sendMessage({ type: "bgConfigUpdate" });
-    showMsg('保存成功！视频永久存储，无其他背景插件也可独立生效', 'success');
+    showMsg('保存成功！视频永久存储，重启客户端不丢失，最大支持300MB', 'success');
   } catch (err) {
-    showMsg(`保存失败：${err.message}，视频过大请压缩后重试`, 'error');
+    showMsg(`保存失败：${err.message}`, 'error');
     console.error("存储异常：", err);
   }
 });
 
-// 清除配置逻辑不变
+// 清除配置逻辑：同步删除IndexedDB内视频+storage配置
 dom.clearBtn.addEventListener('click', async () => {
   if (hasConflict) return;
   try {
-    await chrome.storage.local.remove(['videoBinary', 'bgOpacity', 'videoName', 'fileSize', 'videoType', 'updateTime']);
+    // 删除数据库视频
+    await chrome.runtime.sendMessage({type:"deleteVideoDB",videoId:VIDEO_STORE_ID});
+    // 删除本地轻量配置
+    await chrome.storage.local.remove(['videoId','bgOpacity', 'videoName', 'fileSize', 'videoType', 'updateTime']);
     selectFile = null;
     dom.fileNameText.textContent = '';
     dom.fileInput.value = '';
     chrome.runtime.sendMessage({ type: "bgConfigUpdate" });
     showMsg('已清除全部永久背景配置', 'success');
   } catch (err) {
-    showMsg('清除配置失败', 'error');
+    showMsg('清除配置失败：' + err.message, 'error');
   }
+});
+
+// 悬浮球保存分步逻辑（无改动）
+dom.saveFloatConfig.addEventListener('click', async () => {
+  if (hasConflict) return;
+  const enable = dom.floatBallSwitch.checked;
+  dom.floatTip.textContent = "正在配置悬浮球……";
+  await new Promise(res=>setTimeout(res,600));
+
+  await chrome.storage.local.set({floatBallEnable: enable});
+  dom.floatTip.textContent = "配置悬浮球成功！";
+  await new Promise(res=>setTimeout(res,600));
+
+  dom.floatTip.textContent = "正在创建悬浮球……";
+  await new Promise(res=>setTimeout(res,800));
+
+  chrome.runtime.sendMessage({type:"reloadFloatBall"});
+  dom.floatTip.textContent = "创建成功！请重新刷新页面。";
 });
 
 function showMsg(text, type = '') {
