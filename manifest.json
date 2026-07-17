@@ -6,7 +6,7 @@
   "moekoe": true,
   "author": {
     "name": "篍约",
-    "url": "https://github.com/qiuyue123-star/global-video-bg-plugin"
+    "url": "https://github.com/qiuyue123-star/global-video-bg-plugin/blob/main/manifest.json"
   },
   "description": "为MoeKoeMusic提供独立全局视频动态背景，无需其他背景插件打底，永久保存视频，支持透明度调节，与其他背景类插件互斥不可同时运行",
   "permissions": [
