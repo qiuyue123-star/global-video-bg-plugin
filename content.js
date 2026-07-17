@@ -6,42 +6,52 @@ let dragOffsetX = 0;
 let dragOffsetY = null;
 const originalStyleMap = new WeakMap();
 let currentVideoBlobUrl = null;
-const VIDEO_STORE_ID = "global-bg-video-001";
 let cachedBgConfig = null;
-// 缓冲节流标记，防止高码率视频无限回退
 let bufferLock = false;
-// 视频内存阈值，超大视频自动降低缓冲占用
 const MAX_VIDEO_BUFFER_SEC = 12;
+const CHUNK_SIZE = 2 * 1024 * 1024;
 
-// 渲染全局视频背景（高码率长视频专用优化版：分段缓冲、节流防回退、内存限制）
+// 渲染全局视频背景（分片读取拼接完整视频，支持300MB永久存储）
 async function renderVideoBg() {
     if (!cachedBgConfig) {
         cachedBgConfig = await chrome.runtime.sendMessage({ type: 'getBgConfig' });
     }
     const config = cachedBgConfig;
 
-    if (config.conflict || !config.videoId) {
+    // 无分片标记/冲突，销毁背景
+    if (config.conflict || !config.chunkTotal || config.chunkTotal === 0) {
         removeOldBg();
         return;
     }
 
-    // 已有视频实例仅更新透明度，不重载视频源
+    // 已有视频实例仅更新透明度，不重载视频
     if (bgWrapEl && videoEl) {
         videoEl.style.opacity = config.bgOpacity || 0.7;
         return;
     }
-
     removeOldBg();
 
-    // 读取完整视频二进制
-    const videoData = await chrome.runtime.sendMessage({
-        type: "getFullVideoData",
-        videoId: VIDEO_STORE_ID
+    // 读取全部分片，拼接完整Uint8数组
+    const allData = await chrome.storage.local.get(null);
+    const totalChunks = config.chunkTotal;
+    const fullParts = [];
+    for (let i = 0; i < totalChunks; i++) {
+        const chunk = allData[`videoChunk_${i}`];
+        if (!chunk) continue;
+        fullParts.push(new Uint8Array(chunk));
+    }
+    // 拼接所有分片为完整二进制
+    const totalByteLen = fullParts.reduce((sum, arr) => sum + arr.length, 0);
+    const fullVideoBuf = new Uint8Array(totalByteLen);
+    let offset = 0;
+    fullParts.forEach(part => {
+        fullVideoBuf.set(part, offset);
+        offset += part.length;
     });
-    if (!videoData || !videoData.binary) return;
 
-    const uint8Data = new Uint8Array(videoData.binary);
-    const videoBlob = new Blob([uint8Data], { type: config.videoType || "video/mp4" });
+    // 生成永久Blob视频源
+    const videoBlob = new Blob([fullVideoBuf], { type: config.videoType || "video/mp4" });
+    if(currentVideoBlobUrl) URL.revokeObjectURL(currentVideoBlobUrl);
     currentVideoBlobUrl = URL.createObjectURL(videoBlob);
 
     // 硬件加速底层容器
@@ -67,9 +77,7 @@ async function renderVideoBg() {
     videoEl.loop = true;
     videoEl.muted = true;
     videoEl.playsInline = true;
-    // 超大长视频使用预加载元数据，避免一次性加载全部帧阻塞
     videoEl.preload = "metadata";
-    // 限制视频最大缓冲时长，防止内存溢出
     videoEl.bufferedMaxLength = MAX_VIDEO_BUFFER_SEC;
     videoEl.style = `
         width: 100%;
@@ -80,36 +88,29 @@ async function renderVideoBg() {
         image-rendering: high-quality;
     `;
 
-    // 【核心修复1】缓冲节流锁，杜绝高码率视频无限回退循环
+    // 缓冲节流防回退（原有流畅优化逻辑不变）
     videoEl.addEventListener("waiting", async () => {
         if (bufferLock) return;
         bufferLock = true;
-        // 仅缓冲耗尽时小幅后退，不频繁重置
-        if (videoEl.currentTime > 1) {
-            videoEl.currentTime = videoEl.currentTime - 1;
-        }
+        if (videoEl.currentTime > 1) videoEl.currentTime = videoEl.currentTime - 1;
         await new Promise(res => setTimeout(res, 1200));
         bufferLock = false;
     });
 
-    // 【核心修复2】循环结束平稳重置，不突兀回退
+    // 循环结束平稳重置
     videoEl.addEventListener("ended", () => {
         videoEl.currentTime = 0;
         videoEl.play().catch(() => {});
     });
 
-    // 【核心修复3】定时清理多余缓冲，释放内存（解决高分辨率长视频内存堆积）
+    // 定时清理过期缓冲，控制内存占用
     setInterval(() => {
         if (!videoEl || videoEl.buffered.length === 0) return;
-        const bufferedEnd = videoEl.buffered.end(videoEl.buffered.length - 1);
         const currentTime = videoEl.currentTime;
-        // 清除播放位置之前的过期缓冲，大幅降低内存占用
-        if (currentTime > 3) {
-            videoEl.currentTime = currentTime;
-        }
+        if (currentTime > 3) videoEl.currentTime = currentTime;
     }, 4000);
 
-    // 播放失败自动重试加载
+    // 播放错误自动重试
     videoEl.addEventListener("error", () => {
         videoEl.load();
         setTimeout(() => videoEl.play().catch(() => {}), 800);
@@ -119,7 +120,7 @@ async function renderVideoBg() {
     document.body.prepend(bgWrapEl);
 }
 
-// 销毁背景容器，精准释放视频内存
+// 销毁背景容器，释放视频内存
 function removeOldBg() {
     if (videoEl) {
         videoEl.pause();
@@ -132,8 +133,7 @@ function removeOldBg() {
         videoEl = null;
         cachedBgConfig = null;
     }
-    // 仅彻底清除视频配置时销毁Blob，沉浸式切换保留视频源
-    if (currentVideoBlobUrl && !cachedBgConfig?.videoId) {
+    if (currentVideoBlobUrl && !cachedBgConfig?.chunkTotal) {
         URL.revokeObjectURL(currentVideoBlobUrl);
         currentVideoBlobUrl = null;
     }
@@ -208,7 +208,7 @@ function destroyFloatBall(){
     }
 }
 
-// 沉浸式模式：仅隐藏UI，不销毁视频实例，播放不中断
+// 沉浸式模式：全部UI隐藏（含底部播放器，仅隐藏UI不中断播放）
 function toggleImmersiveMode(){
     isImmersiveMode = !isImmersiveMode;
     const hideAllUISelectors = [
@@ -242,7 +242,7 @@ window.addEventListener('DOMContentLoaded', async ()=>{
     await createFloatBall();
 });
 
-// 后台消息监听，仅更新透明度，不重载视频源
+// 后台消息监听
 chrome.runtime.onMessage.addListener(async (msg) => {
     if (msg.type === "reloadBg") {
         cachedBgConfig = null;
